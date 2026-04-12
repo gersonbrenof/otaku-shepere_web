@@ -1,19 +1,35 @@
 import axios from 'axios';
 
-// Aqui o Vite pega a URL da API que está no seu arquivo .env
+// Instância do Axios
 export const api = axios.create({
+  // Garanta que no seu arquivo .env a VITE_API_BASE_URL seja http://localhost:3000
   baseURL: import.meta.env.VITE_API_BASE_URL,
 });
 
-// Como a sua API retorna o caminho da foto como "uploads/imagem.jpg",
-// precisamos dessa função para juntar a URL da API com o caminho da imagem.
+/**
+ * INTERCEPTOR DE REQUISIÇÃO
+ * Isso resolve o erro 401. Ele verifica se existe um token no LocalStorage
+ * antes de enviar qualquer requisição para o seu servidor.
+ */
+api.interceptors.request.use((config) => {
+    // Busca o token que salvamos no Login
+    const token = localStorage.getItem('@OtakuSphere:token');
+    
+    // Se o token existir, ele "cola" no cabeçalho (Header) da requisição
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    return config;
+}, (error) => {
+    return Promise.reject(error);
+});
+
+// Helper para imagens
 export const getImageUrl = (path: string | null | undefined) => {
-  // Se não tiver imagem, retorna um placeholder
   if (!path) return 'https://via.placeholder.com/300x400?text=Sem+Imagem';
   
-  // Se a imagem já vier como link completo (http...), retorna ela mesma
   if (path.startsWith('http')) return path;
   
-  // Junta a URL do backend com o caminho do upload
   return `${import.meta.env.VITE_API_BASE_URL}/${path}`;
 };

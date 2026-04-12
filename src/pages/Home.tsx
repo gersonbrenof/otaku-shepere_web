@@ -1,156 +1,208 @@
-import { useState, useEffect } from 'react';
-import { Search, Filter, PlayCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Filter, PlayCircle, Star, User, LogOut, Settings, Heart, ChevronDown } from 'lucide-react';
 import { useNavigate } from "react-router-dom";
-import { api, getImageUrl } from '../services/api';
-import type { Anime } from '../types/anime';
+import { api } from '../services/api';
+
+interface Anime {
+    id: number;
+    title: string;
+    main_picture: { medium: string; large: string; };
+    synopsis: string;
+    mean?: number;
+    genres?: { id: number; name: string }[];
+}
+
 export function Home() {
     const [animes, setAnimes] = useState<Anime[]>([]);
     const [loading, setLoading] = useState(true);
-
-    // Estados para filtro e busca
     const [busca, setBusca] = useState('');
-    const [generoSelecionado, setGeneroSelecionado] = useState('');
+    const [generoSelecionado, setGeneroSelecionado] = useState('Todos');
+    
+    // VERIFICAÇÃO DE LOGIN REAL: Checa se o token existe no navegador
+    const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('@OtakuSphere:token'));
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
 
-    // Gêneros mockados para o filtro (você pode puxar da API se tiver uma rota para isso)
-    const generos = ['Todos', 'Ação', 'Aventura', 'Comédia', 'Drama', 'Fantasia', 'Romance'];
+    const generos = ['Todos', 'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Romance', 'Sci-Fi', 'Suspense'];
     const navigate = useNavigate();
-    // Função para buscar animes na API
+
+    // Função para Sair (Logout)
+    const handleLogout = () => {
+        localStorage.removeItem('@OtakuSphere:token'); // Remove o token
+        setIsLoggedIn(false);
+        setIsMenuOpen(false);
+        navigate('/'); // Volta para a home limpa
+    };
+
+    // Fechar menu ao clicar fora
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsMenuOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
     const fetchAnimes = async () => {
         setLoading(true);
         try {
-            // Monta os parâmetros de query baseados no estado
-            const params: any = {};
-            if (busca) params.titulo = busca;
-            if (generoSelecionado && generoSelecionado !== 'Todos') params.genero = generoSelecionado;
-
-            const response = await api.get('/anime', { params });
+            let response;
+            if (busca) {
+                response = await api.get('/anime/search', { params: { titulo: busca } });
+            } else if (generoSelecionado !== 'Todos') {
+                response = await api.get('/anime/categoria', { params: { genre: generoSelecionado, limit: 20 } });
+            } else {
+                response = await api.get('/anime/ranking', { params: { type: 'bypopularity' } });
+            }
             setAnimes(response.data);
         } catch (error) {
             console.error("Erro ao buscar animes:", error);
+            setAnimes([]);
         } finally {
             setLoading(false);
         }
     };
 
-    // Dispara a busca toda vez que o filtro de gênero ou a busca textual mudar
-    // O debounce (delay) idealmente seria adicionado na busca de texto, mas para simplificar faremos direto.
     useEffect(() => {
-        // Um pequeno delay para não fazer requisição a cada tecla digitada
-        const timeoutId = setTimeout(() => {
-            fetchAnimes();
-        }, 500);
+        const timeoutId = setTimeout(() => fetchAnimes(), 500);
         return () => clearTimeout(timeoutId);
     }, [busca, generoSelecionado]);
 
     return (
-        <div className="min-h-screen font-sans">
-            {/* HEADER / NAVBAR */}
-            <header className="sticky top-0 z-50 bg-dark/80 backdrop-blur-md border-b border-gray-800">
-                <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <h1 className="text-3xl font-black bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent cursor-pointer">
+        <div className="min-h-screen bg-[#0B0C10] text-white font-sans">
+            {/* HEADER */}
+            <header className="sticky top-0 z-50 bg-[#0B0C10]/95 backdrop-blur-md border-b border-gray-800 shadow-2xl">
+                <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+                    
+                    {/* LOGO */}
+                    <h1 
+                        onClick={() => {setBusca(''); setGeneroSelecionado('Todos'); navigate('/')}}
+                        className="text-2xl md:text-3xl font-black bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
+                    >
                         OtakuSphere
                     </h1>
 
-                    {/* BARRA DE BUSCA */}
-                    <div className="relative w-full md:w-96">
+                    {/* BUSCA CENTRALIZADA */}
+                    <div className="hidden md:relative md:flex items-center w-full max-w-md">
                         <input
                             type="text"
-                            placeholder="Buscar anime pelo título..."
+                            placeholder="Buscar animes..."
                             value={busca}
                             onChange={(e) => setBusca(e.target.value)}
-                            className="w-full bg-darkCard text-white rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-primary transition-all placeholder-gray-400 border border-gray-700"
+                            className="w-full bg-gray-900/50 text-sm text-white rounded-xl py-2.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-600 transition-all border border-gray-700"
                         />
-                        <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
+                        <Search className="absolute left-3.5 text-gray-500" size={18} />
+                    </div>
+
+                    {/* ÁREA DE USUÁRIO */}
+                    <div className="flex items-center gap-4">
+                        {!isLoggedIn ? (
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => navigate('/login')} // Redireciona para Login
+                                    className="hidden sm:block text-sm font-semibold hover:text-purple-400 transition-colors px-4"
+                                >
+                                    Entrar
+                                </button>
+                                <button 
+                                    onClick={() => navigate('/register')} // Redireciona para Cadastro
+                                    className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold py-2 px-5 rounded-lg transition-all shadow-lg shadow-purple-500/20"
+                                >
+                                    Cadastrar
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="relative" ref={menuRef}>
+                                <button 
+                                    onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                    className="flex items-center gap-2 p-1 pr-3 bg-gray-900 rounded-full border border-gray-700 hover:border-purple-500 transition-all"
+                                >
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center font-bold text-xs uppercase">
+                                        U
+                                    </div>
+                                    <span className="text-sm font-medium hidden sm:block">Meu Perfil</span>
+                                    <ChevronDown size={16} className={`text-gray-400 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                {isMenuOpen && (
+                                    <div className="absolute right-0 mt-3 w-56 bg-[#161B22] border border-gray-700 rounded-xl shadow-2xl py-2 overflow-hidden animate-in fade-in zoom-in duration-200">
+                                        <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-purple-600/10 hover:text-purple-400 transition-colors">
+                                            <User size={18} /> Perfil
+                                        </button>
+                                        <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-purple-600/10 hover:text-purple-400 transition-colors">
+                                            <Heart size={18} /> Favoritos
+                                        </button>
+                                        <div className="border-t border-gray-800 mt-2">
+                                            <button 
+                                                onClick={handleLogout} // Chama a função de sair
+                                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-400/10 transition-colors"
+                                            >
+                                                <LogOut size={18} /> Sair
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </header>
 
-            {/* HERO SECTION */}
-            <section className="relative h-[40vh] min-h-[300px] flex items-center justify-center overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-r from-dark to-transparent z-10" />
-                <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=1920&auto=format&fit=crop')] bg-cover bg-center opacity-30 blur-[2px]" />
-
-                <div className="relative z-20 text-center px-4">
-                    <h2 className="text-4xl md:text-6xl font-black mb-4 drop-shadow-lg">
-                        Seu portal de <span className="text-primary">Animes</span>
-                    </h2>
-                    <p className="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto drop-shadow-md">
-                        Descubra, filtre e encontre seus animes favoritos na maior biblioteca otaku.
-                    </p>
-                </div>
-            </section>
-
-            {/* CONTEÚDO PRINCIPAL */}
-            <main className="max-w-7xl mx-auto px-4 py-12">
-
-                {/* FILTROS DE CATEGORIA */}
-                <div className="flex items-center gap-4 mb-8 overflow-x-auto pb-4 scrollbar-hide">
-                    <Filter className="text-primary min-w-[24px]" size={24} />
+            {/* CONTEÚDO */}
+            <main className="max-w-7xl mx-auto px-4 py-6">
+                
+                {/* FILTROS */}
+                <div className="flex items-center gap-3 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+                    <Filter className="text-purple-500 mr-2" size={20} />
                     {generos.map((gen) => (
                         <button
                             key={gen}
-                            onClick={() => setGeneroSelecionado(gen)}
-                            className={`px-6 py-2 rounded-full font-medium whitespace-nowrap transition-all duration-300 border ${generoSelecionado === gen || (generoSelecionado === '' && gen === 'Todos')
-                                ? 'bg-primary border-primary text-white shadow-[0_0_15px_rgba(139,92,246,0.5)]'
-                                : 'bg-darkCard border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
-                                }`}
+                            onClick={() => { setGeneroSelecionado(gen); setBusca(''); }}
+                            className={`px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${
+                                generoSelecionado === gen
+                                ? 'bg-purple-600 border-purple-600 text-white'
+                                : 'bg-gray-900 border-gray-800 text-gray-400 hover:border-gray-600'
+                            }`}
                         >
                             {gen}
                         </button>
                     ))}
                 </div>
 
-                {/* GRID DE ANIMES */}
+                {/* GRID */}
                 {loading ? (
                     <div className="flex justify-center items-center h-64">
-                        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary"></div>
-                    </div>
-                ) : animes.length === 0 ? (
-                    <div className="text-center py-20 text-gray-400">
-                        <p className="text-2xl mb-2">Nenhum anime encontrado 😢</p>
-                        <p>Tente buscar por outro título ou gênero.</p>
+                        <div className="h-10 w-10 border-t-2 border-purple-500 rounded-full animate-spin"></div>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-8">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
                         {animes.map((anime) => (
                             <div
                                 key={anime.id}
-                                className="group relative bg-darkCard rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl hover:shadow-primary/20 transition-all duration-300 transform hover:-translate-y-2 border border-gray-800"
+                                onClick={() => navigate(`/anime/${anime.id}`)}
+                                className="group cursor-pointer flex flex-col"
                             >
-                                {/* Imagem do Anime */}
-                                <div className="relative h-72 md:h-80 w-full overflow-hidden">
+                                <div className="relative aspect-[3/4.5] rounded-xl overflow-hidden mb-3">
                                     <img
-                                        src={getImageUrl(anime.foto)}
-                                        alt={anime.titulo}
-                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                        onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/300x400?text=Sem+Imagem'; }}
+                                        src={anime.main_picture.large || anime.main_picture.medium}
+                                        alt={anime.title}
+                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                                     />
-                                    {/* Overlay Escuro ao passar o mouse */}
-                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                                        <PlayCircle size={60} className="text-primary hover:text-white transition-colors cursor-pointer" />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <PlayCircle size={40} className="text-white" />
                                     </div>
-                                    {/* Badge de Gênero */}
-                                    <span className="absolute top-3 right-3 bg-primary/90 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm shadow-lg">
-                                        {anime.genero}
-                                    </span>
+                                    {anime.mean && (
+                                        <div className="absolute top-2 right-2 bg-black/80 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1">
+                                            <Star size={12} className="text-yellow-400 fill-yellow-400" />
+                                            <span className="text-[11px] font-bold">{anime.mean}</span>
+                                        </div>
+                                    )}
                                 </div>
-
-                                {/* Info do Anime */}
-                                <div className="p-5 relative">
-                                    <h3 className="text-xl font-bold mb-2 text-white group-hover:text-primary transition-colors line-clamp-1">
-                                        {anime.titulo}
-                                    </h3>
-                                    <p className="text-gray-400 text-sm line-clamp-3 mb-4">
-                                        {anime.descricao}
-                                    </p>
-
-                                    <button
-                                        onClick={() => navigate(`/anime/${anime.id}`)}
-                                        className="w-full py-2 bg-gray-800 hover:bg-primary/20 hover:text-primary text-gray-300 font-semibold rounded-lg transition-colors border border-gray-700 hover:border-primary/50"
-                                    >
-                                        Ver Detalhes
-                                    </button>
-                                </div>
+                                <h3 className="font-bold text-sm md:text-[15px] line-clamp-1 group-hover:text-purple-400 transition-colors">
+                                    {anime.title}
+                                </h3>
                             </div>
                         ))}
                     </div>
