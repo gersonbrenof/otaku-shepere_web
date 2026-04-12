@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Filter, PlayCircle, Star, User, LogOut, Settings, Heart, ChevronDown } from 'lucide-react';
+import { Search, Filter, PlayCircle, Star, User, LogOut, Heart, ChevronDown } from 'lucide-react';
 import { useNavigate } from "react-router-dom";
 import { api } from '../services/api';
 
