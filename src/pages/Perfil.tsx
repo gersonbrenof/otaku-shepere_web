@@ -1,4 +1,4 @@
-import { useState, useEffect, ChangeEvent, FormEvent } from 'react';
+import { useState, useEffect, type ChangeEvent, type FormEvent } from 'react';
 import { User, Mail, Shield, Camera, Save, Loader2, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';

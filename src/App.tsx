@@ -1,7 +1,7 @@
 // App.tsx
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import {  BrowserRouter, Routes, Route } from "react-router-dom";
 
-import { Layout } from "./components/Layout"; 
+//import { Layout } from "./components/Layout";
 import { Home } from "./pages/Home";
 import { AnimeDetalhe } from "./pages/AnimeDetalhe";
 import { Register } from "./pages/Register";
