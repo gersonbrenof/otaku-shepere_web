@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Filter, PlayCircle, Star, User, LogOut, Heart, ChevronDown } from 'lucide-react';
+import { Filter, PlayCircle, Star, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from "react-router-dom";
 import { api } from '../services/api';
+import { Layout } from '../components/Layout';
 
 interface Anime {
     id: number;
@@ -9,7 +10,7 @@ interface Anime {
     main_picture: { medium: string; large: string; };
     synopsis: string;
     mean?: number;
-    genres?: { id: number; name: string }[];
+    genres?: { id: number; name: string }[]; 
 }
 
 export function Home() {
@@ -18,196 +19,240 @@ export function Home() {
     const [busca, setBusca] = useState('');
     const [generoSelecionado, setGeneroSelecionado] = useState('Todos');
     
-    // VERIFICAÇÃO DE LOGIN REAL: Checa se o token existe no navegador
-    const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('@OtakuSphere:token'));
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const menuRef = useRef<HTMLDivElement>(null);
+    const [pagina, setPagina] = useState(1);
+    const [hasNextPage, setHasNextPage] = useState(false);
 
-    const generos = ['Todos', 'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Romance', 'Sci-Fi', 'Suspense'];
+    const [temporadaSelecionada, setTemporadaSelecionada] = useState({
+        ano: new Date().getFullYear(),
+        season: ''
+    });
+
+    const carouselRef = useRef<HTMLDivElement>(null);
+    const generos = ['Todos', 'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Romance', 'Sci-Fi', 'Suspense', 'Horror', 'Mystery', 'Slice of Life'];
     const navigate = useNavigate();
 
-    // Função para Sair (Logout)
-    const handleLogout = () => {
-        localStorage.removeItem('@OtakuSphere:token'); // Remove o token
-        setIsLoggedIn(false);
-        setIsMenuOpen(false);
-        navigate('/'); // Volta para a home limpa
+    const handleResetFilters = () => {
+        setBusca('');
+        setGeneroSelecionado('Todos');
+        setTemporadaSelecionada(prev => ({ ...prev, season: '' }));
+        setPagina(1);
     };
 
-    // Fechar menu ao clicar fora
-    useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-                setIsMenuOpen(false);
-            }
+    const scrollCarrossel = (direction: 'left' | 'right') => {
+        if (carouselRef.current) {
+            const scrollAmount = 200;
+            carouselRef.current.scrollBy({
+                left: direction === 'left' ? -scrollAmount : scrollAmount,
+                behavior: 'smooth'
+            });
         }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
+    };
 
     const fetchAnimes = async () => {
         setLoading(true);
         try {
             let response;
+            const params: any = { page: pagina, limit: 15 };
+
             if (busca) {
-                response = await api.get('/anime/search', { params: { titulo: busca } });
+                response = await api.get('/anime/search', { params: { titulo: busca, ...params } });
+            } else if (temporadaSelecionada.season) {
+                response = await api.get(
+                    `/anime/temporada/${temporadaSelecionada.ano}/${temporadaSelecionada.season}`, 
+                    { params }
+                );
             } else if (generoSelecionado !== 'Todos') {
-                response = await api.get('/anime/categoria', { params: { genre: generoSelecionado, limit: 20 } });
+                response = await api.get('/anime/categoria', { params: { genre: generoSelecionado, ...params } });
             } else {
-                response = await api.get('/anime/ranking', { params: { type: 'bypopularity' } });
+                response = await api.get('/anime/ranking', { params: { type: 'bypopularity', ...params } });
             }
-            setAnimes(response.data);
+
+            if (response.data && response.data.data) {
+                setAnimes(response.data.data);
+                setHasNextPage(response.data.pagination.hasNextPage);
+            } else {
+                setAnimes(Array.isArray(response.data) ? response.data : []);
+                setHasNextPage(false);
+            }
         } catch (error) {
             console.error("Erro ao buscar animes:", error);
             setAnimes([]);
+            setHasNextPage(false);
         } finally {
             setLoading(false);
         }
     };
 
+    // Reseta a paginação quando os filtros mudam
     useEffect(() => {
-        const timeoutId = setTimeout(() => fetchAnimes(), 500);
+        setPagina(1);
+    }, [busca, generoSelecionado, temporadaSelecionada.season, temporadaSelecionada.ano]);
+
+    // Busca os animes sempre que as dependências mudarem
+    useEffect(() => {
+        const timeoutId = setTimeout(() => fetchAnimes(), 300);
         return () => clearTimeout(timeoutId);
-    }, [busca, generoSelecionado]);
+    }, [busca, generoSelecionado, temporadaSelecionada.season, temporadaSelecionada.ano, pagina]);
 
     return (
-        <div className="min-h-screen bg-[#0B0C10] text-white font-sans">
-            {/* HEADER */}
-            <header className="sticky top-0 z-50 bg-[#0B0C10]/95 backdrop-blur-md border-b border-gray-800 shadow-2xl">
-                <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-                    
-                    {/* LOGO */}
-                    <h1 
-                        onClick={() => {setBusca(''); setGeneroSelecionado('Todos'); navigate('/')}}
-                        className="text-2xl md:text-3xl font-black bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
+        <Layout busca={busca} setBusca={setBusca} onResetFilters={handleResetFilters}>
+            
+            {/* Seção de Filtros (Gêneros e Temporada) */}
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 items-center mb-10 bg-gray-900/30 p-4 rounded-2xl border border-gray-800/40 backdrop-blur-sm">
+                
+                <div className="xl:col-span-3 relative flex items-center group w-full overflow-hidden">
+                    <button 
+                        onClick={() => scrollCarrossel('left')}
+                        className="hidden md:flex absolute left-0 z-10 items-center justify-center w-8 h-8 bg-black/70 hover:bg-purple-600 border border-gray-800 rounded-full text-white cursor-pointer transition-all opacity-0 group-hover:opacity-100 shadow-lg backdrop-blur-md"
                     >
-                        OtakuSphere
-                    </h1>
+                        <ChevronLeft size={16} />
+                    </button>
 
-                    {/* BUSCA CENTRALIZADA */}
-                    <div className="hidden md:relative md:flex items-center w-full max-w-md">
-                        <input
-                            type="text"
-                            placeholder="Buscar animes..."
-                            value={busca}
-                            onChange={(e) => setBusca(e.target.value)}
-                            className="w-full bg-gray-900/50 text-sm text-white rounded-xl py-2.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-600 transition-all border border-gray-700"
-                        />
-                        <Search className="absolute left-3.5 text-gray-500" size={18} />
+                    <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#060709]/80 to-transparent pointer-events-none z-10 hidden md:block"></div>
+                    
+                    <div 
+                        ref={carouselRef}
+                        className="flex items-center gap-2 overflow-x-auto w-full py-1.5 px-2 md:px-8 scroll-smooth"
+                        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                    >
+                        <style>{`div::-webkit-scrollbar { display: none; }`}</style>
+
+                        <div className="flex items-center text-purple-400 bg-purple-500/10 p-2 rounded-xl border border-purple-500/20 mr-1 flex-shrink-0">
+                            <Filter size={14} />
+                        </div>
+
+                        {generos.map((gen) => (
+                            <button
+                                key={gen}
+                                onClick={() => { 
+                                    setGeneroSelecionado(gen); 
+                                    setBusca(''); 
+                                    setTemporadaSelecionada(prev => ({ ...prev, season: '' }));
+                                    setPagina(1);
+                                }}
+                                className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all border whitespace-nowrap cursor-pointer active:scale-95 ${
+                                    generoSelecionado === gen && !temporadaSelecionada.season
+                                    ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-600/30 scale-105'
+                                    : 'bg-gray-900/60 border-gray-800/80 text-gray-400 hover:text-white hover:border-gray-700'
+                                }`}
+                            >
+                                {gen}
+                            </button>
+                        ))}
                     </div>
 
-                    {/* ÁREA DE USUÁRIO */}
-                    <div className="flex items-center gap-4">
-                        {!isLoggedIn ? (
-                            <div className="flex items-center gap-2">
-                                <button 
-                                    onClick={() => navigate('/login')} // Redireciona para Login
-                                    className="hidden sm:block text-sm font-semibold hover:text-purple-400 transition-colors px-4"
-                                >
-                                    Entrar
-                                </button>
-                                <button 
-                                    onClick={() => navigate('/register')} // Redireciona para Cadastro
-                                    className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold py-2 px-5 rounded-lg transition-all shadow-lg shadow-purple-500/20"
-                                >
-                                    Cadastrar
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="relative" ref={menuRef}>
-                                <button 
-                                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                                    className="flex items-center gap-2 p-1 pr-3 bg-gray-900 rounded-full border border-gray-700 hover:border-purple-500 transition-all"
-                                >
-                                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center font-bold text-xs uppercase">
-                                        U
-                                    </div>
-                                    <span className="text-sm font-medium hidden sm:block">Meu Perfil</span>
-                                    <ChevronDown size={16} className={`text-gray-400 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} />
-                                </button>
+                    <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#060709]/80 to-transparent pointer-events-none z-10 hidden md:block"></div>
 
-                                {isMenuOpen && (
-                                    <div className="absolute right-0 mt-3 w-56 bg-[#161B22] border border-gray-700 rounded-xl shadow-2xl py-2 overflow-hidden animate-in fade-in zoom-in duration-200">
-                                        <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-purple-600/10 hover:text-purple-400 transition-colors">
-                                            <User size={18} /> Perfil
-                                        </button>
-                                        <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-purple-600/10 hover:text-purple-400 transition-colors">
-                                            <Heart size={18} /> Favoritos
-                                        </button>
-                                        <div className="border-t border-gray-800 mt-2">
-                                            <button 
-                                                onClick={handleLogout} // Chama a função de sair
-                                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-400/10 transition-colors"
-                                            >
-                                                <LogOut size={18} /> Sair
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                    <button 
+                        onClick={() => scrollCarrossel('right')}
+                        className="hidden md:flex absolute right-0 z-10 items-center justify-center w-8 h-8 bg-black/70 hover:bg-purple-600 border border-gray-800 rounded-full text-white cursor-pointer transition-all opacity-0 group-hover:opacity-100 shadow-lg backdrop-blur-md"
+                    >
+                        <ChevronRight size={16} />
+                    </button>
+                </div>
+
+                <div className="flex items-center justify-between bg-gray-900/60 border border-gray-800 px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-300 w-full">
+                    <div className="flex items-center gap-2">
+                        <Calendar className="text-purple-400" size={14} />
+                        <span className="text-gray-500 text-[10px] font-black uppercase tracking-wider">Temporada</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <select
+                            value={temporadaSelecionada.season}
+                            onChange={(e) => {
+                                setTemporadaSelecionada(prev => ({ ...prev, season: e.target.value }));
+                                setGeneroSelecionado('Todos');
+                                setBusca('');
+                            }}
+                            className="bg-transparent text-purple-400 font-bold focus:outline-none cursor-pointer border-none text-right"
+                        >
+                            <option value="" className="bg-[#0F1115] text-gray-500">Nenhuma</option>
+                            <option value="inverno" className="bg-[#0F1115] text-white">❄️ Inverno</option>
+                            <option value="primavera" className="bg-[#0F1115] text-white">🌸 Primavera</option>
+                            <option value="verao" className="bg-[#0F1115] text-white">☀️ Verão</option>
+                            <option value="outono" className="bg-[#0F1115] text-white">🍂 Outono</option>
+                        </select>
+
+                        {temporadaSelecionada.season && (
+                            <input
+                                type="number"
+                                min="1970"
+                                max={new Date().getFullYear() + 1}
+                                value={temporadaSelecionada.ano}
+                                onChange={(e) => {
+                                    const a = parseInt(e.target.value, 10) || new Date().getFullYear();
+                                    setTemporadaSelecionada(prev => ({ ...prev, ano: a }));
+                                }}
+                                className="bg-gray-950 text-purple-400 font-black focus:outline-none w-16 text-center border border-gray-800 rounded-lg py-0.5"
+                            />
                         )}
                     </div>
                 </div>
-            </header>
+            </div>
 
-            {/* CONTEÚDO */}
-            <main className="max-w-7xl mx-auto px-4 py-6">
-                
-                {/* FILTROS */}
-                <div className="flex items-center gap-3 mb-8 overflow-x-auto pb-2 scrollbar-hide">
-                    <Filter className="text-purple-500 mr-2" size={20} />
-                    {generos.map((gen) => (
-                        <button
-                            key={gen}
-                            onClick={() => { setGeneroSelecionado(gen); setBusca(''); }}
-                            className={`px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${
-                                generoSelecionado === gen
-                                ? 'bg-purple-600 border-purple-600 text-white'
-                                : 'bg-gray-900 border-gray-800 text-gray-400 hover:border-gray-600'
-                            }`}
-                        >
-                            {gen}
-                        </button>
-                    ))}
+            {/* Conteúdo Principal (Loading ou Grid de Animes) */}
+            {loading ? (
+                <div className="flex flex-col justify-center items-center h-72 gap-3">
+                    <div className="h-8 w-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-xs font-semibold text-gray-500 tracking-wider uppercase">Carregando Acervo...</span>
                 </div>
-
-                {/* GRID */}
-                {loading ? (
-                    <div className="flex justify-center items-center h-64">
-                        <div className="h-10 w-10 border-t-2 border-purple-500 rounded-full animate-spin"></div>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
+            ) : (
+                <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
                         {animes.map((anime) => (
                             <div
                                 key={anime.id}
                                 onClick={() => navigate(`/anime/${anime.id}`)}
-                                className="group cursor-pointer flex flex-col"
+                                className="group cursor-pointer flex flex-col hover:-translate-y-1 transition-all duration-300"
                             >
-                                <div className="relative aspect-[3/4.5] rounded-xl overflow-hidden mb-3">
+                                <div className="relative aspect-[3/4.2] rounded-xl overflow-hidden mb-2.5 border border-gray-900 bg-gray-900 group-hover:border-purple-500/40 transition-all duration-300 shadow-md">
                                     <img
                                         src={anime.main_picture.large || anime.main_picture.medium}
                                         alt={anime.title}
-                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                                        loading="lazy"
+                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                     />
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <PlayCircle size={40} className="text-white" />
+                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <PlayCircle size={38} className="text-white scale-90 group-hover:scale-100 transition-transform duration-300" />
                                     </div>
                                     {anime.mean && (
-                                        <div className="absolute top-2 right-2 bg-black/80 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1">
-                                            <Star size={12} className="text-yellow-400 fill-yellow-400" />
-                                            <span className="text-[11px] font-bold">{anime.mean}</span>
+                                        <div className="absolute top-2 right-2 bg-black/75 backdrop-blur-sm px-2 py-0.5 rounded-md flex items-center gap-1 border border-gray-800/60">
+                                            <Star size={10} className="text-yellow-400 fill-yellow-400" />
+                                            <span className="text-[10px] font-black">{anime.mean}</span>
                                         </div>
                                     )}
                                 </div>
-                                <h3 className="font-bold text-sm md:text-[15px] line-clamp-1 group-hover:text-purple-400 transition-colors">
+                                <h3 className="font-bold text-xs md:text-sm line-clamp-1 group-hover:text-purple-400 transition-colors px-0.5 text-gray-200">
                                     {anime.title}
                                 </h3>
                             </div>
                         ))}
                     </div>
-                )}
-            </main>
-        </div>
+
+                    {/* Paginação */}
+                    {animes.length > 0 && (
+                        <div className="flex items-center justify-center gap-3 mt-12 pb-8">
+                            <button
+                                disabled={pagina === 1}
+                                onClick={() => setPagina(prev => Math.max(prev - 1, 1))}
+                                className="px-4 py-2 rounded-xl bg-gray-900/60 border border-gray-800/80 text-xs font-bold text-gray-400 hover:text-white hover:border-purple-500 disabled:opacity-20 disabled:cursor-not-allowed transition-all cursor-pointer"
+                            >
+                                Anterior
+                            </button>
+                            <div className="bg-gray-900/40 px-4 py-2 border border-gray-800/60 rounded-xl text-xs font-bold text-gray-400">
+                                Pág. <span className="text-purple-400">{pagina}</span>
+                            </div>
+                            <button
+                                disabled={!hasNextPage}
+                                onClick={() => setPagina(prev => prev + 1)}
+                                className="px-4 py-2 rounded-xl bg-gray-900/60 border border-gray-800/80 text-xs font-bold text-gray-400 hover:text-white hover:border-purple-500 disabled:opacity-20 disabled:cursor-not-allowed transition-all cursor-pointer"
+                            >
+                                Próxima
+                            </button>
+                        </div>
+                    )}
+                </>
+            )}
+        </Layout>
     );
 }

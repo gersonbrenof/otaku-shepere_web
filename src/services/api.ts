@@ -1,35 +1,52 @@
 import axios from 'axios';
 
-// Instância do Axios
+// Garante uma URL base padrão caso a variável de ambiente não esteja configurada
+const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
 export const api = axios.create({
-  // Garanta que no seu arquivo .env a VITE_API_BASE_URL seja http://localhost:3000
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: API_URL,
+  withCredentials: true, // 👈 ESSENCIAL: Permite o envio/recebimento de cookies HttpOnly
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 /**
- * INTERCEPTOR DE REQUISIÇÃO
- * Isso resolve o erro 401. Ele verifica se existe um token no LocalStorage
- * antes de enviar qualquer requisição para o seu servidor.
+ * INTERCEPTOR DE RESPOSTA
+ * Trata erros globais de autenticação (ex: sessão/cookie expirado)
  */
-api.interceptors.request.use((config) => {
-    // Busca o token que salvamos no Login
-    const token = localStorage.getItem('@OtakuSphere:token');
-    
-    // Se o token existir, ele "cola" no cabeçalho (Header) da requisição
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Se o backend retornar 401 (Não autorizado/Sessão expirada)
+    if (error.response && error.response.status === 401) {
+      // Evita redirecionar em loop se ele já estiver na página de login
+      if (!window.location.pathname.includes('/login')) {
+        console.warn('Sessão expirada. Redirecionando para o login...');
+        // Opcional: Descomente a linha abaixo se quiser forçar o redirecionamento ao expirar o cookie
+        // window.location.href = '/login';
+      }
     }
-    
-    return config;
-}, (error) => {
     return Promise.reject(error);
-});
+  }
+);
 
-// Helper para imagens
-export const getImageUrl = (path: string | null | undefined) => {
-  if (!path) return 'https://via.placeholder.com/300x400?text=Sem+Imagem';
-  
-  if (path.startsWith('http')) return path;
-  
-  return `${import.meta.env.VITE_API_BASE_URL}/${path}`;
+/**
+ * HELPER PARA FORMATAÇÃO DE IMAGENS
+ */
+export const getImageUrl = (path: string | null | undefined): string => {
+  if (!path) {
+    return 'https://via.placeholder.com/300x400?text=Sem+Imagem';
+  }
+
+  // Se já for uma URL completa (ex: foto do Google ou S3)
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+
+  // Limpa barras duplicadas ao juntar a baseURL com o caminho da imagem
+  const cleanBase = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+
+  return `${cleanBase}${cleanPath}`;
 };
